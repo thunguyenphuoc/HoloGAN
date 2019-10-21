@@ -11,7 +11,6 @@ def tf_repeat(x, n_repeats):
     return tf.reshape(x, [-1])
 
 def tf_interpolate(voxel, x, y, z, out_size):
-
     """
     Trilinear interpolation for batch of voxels
     :param voxel: The whole voxel grid
@@ -134,18 +133,13 @@ def tf_voxel_meshgrid(height, width, depth, homogeneous = False):
             grid = tf.concat([grid, ones], axis = 0)
         return grid
 
-def tf_rotation_around_grid_centroid(view_params, useX = True, shapenet_viewer = False):
-    """
-    :param view_params: batch of view parameters. Shape : [batch_size, 2]
-    :param radius:
-    :param useX: USe when X axis and Z axis are switched
-    :return:
-    """
-    #This function returns a rotation matrix around a center with y-axis being the up vector.
+def tf_rotation_around_grid_centroid(view_params, shapenet_viewer = False):
+    #This function returns a rotation matrix around a center with y-axis being the up vector, and a scale matrix.
     #It first rotates the matrix by the azimuth angle (theta) around y, then around X-axis by elevation angle (gamma)
     #return a rotation matrix in homogenous coordinate
     #The default Open GL camera is to looking towards the negative Z direction
     #This function is suitable when the silhoutte projection is done along the Z direction
+
     batch_size = tf.shape(view_params)[0]
 
     azimuth    = tf.reshape(view_params[:, 0], (batch_size, 1, 1))
@@ -174,13 +168,6 @@ def tf_rotation_around_grid_centroid(view_params, useX = True, shapenet_viewer =
         tf.concat([zeros, zeros, ones,  zeros], axis=2),
         tf.concat([zeros, zeros, zeros, ones], axis=2)], axis=1)
 
-    #Batch Rotation X matrixes
-
-    batch_Rot_X = tf.concat([
-        tf.concat([ones,  zeros,  zeros, zeros], axis=2),
-        tf.concat([zeros, tf.cos(elevation),  -tf.sin(elevation), zeros], axis=2),
-        tf.concat([zeros, tf.sin(elevation),  tf.cos(elevation),  zeros], axis=2),
-        tf.concat([zeros, zeros,  zeros, ones], axis=2)], axis=1)
 
     transformation_matrix = tf.matmul(batch_Rot_Z, batch_Rot_Y)
     if tf.shape(view_params)[1] == 2:
@@ -195,16 +182,15 @@ def tf_rotation_around_grid_centroid(view_params, useX = True, shapenet_viewer =
             tf.concat([zeros, zeros,  zeros, ones], axis=2)], axis=1)
     return transformation_matrix, batch_Scale
 
-def tf_resampling_translation(voxel_array, transformation_matrix, params, Scale_matrix = None, size=64, new_size=128):
+def tf_rotation_resampling(voxel_array, transformation_matrix, params, Scale_matrix = None, size=64, new_size=128):
     """
-    Batch resampling function
+    Batch transformation and resampling function
     :param voxel_array: batch of voxels. Shape = [batch_size, height, width, depth, features]
     :param transformation_matrix: Rotation matrix. Shape = [batch_size, height, width, depth, features]
-    :param size:
-    :param new_size:
-    :return:
+    :param size: original size of the voxel array
+    :param new_size: size of the resampled array
+    :return: transformed voxel array
     """
-
     batch_size = tf.shape(voxel_array)[0]
     n_channels = voxel_array.get_shape()[4].value
     target = tf.zeros([ batch_size, new_size, new_size, new_size])
@@ -223,7 +209,6 @@ def tf_resampling_translation(voxel_array, transformation_matrix, params, Scale_
                              [0, 0, 1, new_size * 0.5],
                              [0, 0, 0, 1]])
     T_new_inv = tf.tile(tf.reshape(T_new_inv, (1, 4, 4)), [batch_size, 1, 1])
-    print(tf.shape(params)[1])
 
 
     # Add the actual shifting in x and y dimension accoding to input param
@@ -262,9 +247,17 @@ def tf_resampling_translation(voxel_array, transformation_matrix, params, Scale_
     except tf.InvalidArgumentError:
         return None
 
-def tf_rotation_resampling(voxel_array, view_params, size=64, new_size=128, shapenet_viewer=False):
-    M, S = tf_rotation_around_grid_centroid(view_params[:, :3], useX=True, shapenet_viewer=shapenet_viewer)
-    target, grids = tf_resampling_translation(voxel_array, M, params=view_params, Scale_matrix=S, size = size, new_size=new_size)
+def tf_3D_transform(voxel_array, view_params, size=64, new_size=128, shapenet_viewer=False):
+    """
+    Wrapper function to do 3D transformation
+    :param voxel_array: batch of voxels. Shape = [batch_size, height, width, depth, features]
+    :param transformation_matrix: Rotation matrix. Shape = [batch_size, height, width, depth, features]
+    :param size: original size of the voxel array
+    :param new_size: size of the resampled array
+    :return: transformed voxel array
+    """
+    M, S = tf_rotation_around_grid_centroid(view_params[:, :3], shapenet_viewer=shapenet_viewer)
+    target, grids = tf_rotation_resampling(voxel_array, M, params=view_params, Scale_matrix=S, size = size, new_size=new_size)
     return target
 
 def generate_random_rotation_translation(batch_size, elevation_low=10, elevation_high=170, azimuth_low=0, azimuth_high=359,
@@ -297,12 +290,3 @@ def generate_random_rotation_translation(batch_size, elevation_low=10, elevation
 
     return params
 
-
-if __name__ == "__main__":
-    roll = np.zeros([2,1])
-    pitch = 80 * np.ones([2, 1])
-    yaw = 180 * np.ones([2, 1])
-    qx, qy, qz, qw = euler_to_quaternion(np.radians(roll), np.radians(pitch), np.radians(yaw))
-    print( qx, qy, qz, qw)
-    yaw, pitch, roll = quaternion_to_euler(qx, qy, qz, qw)
-    print(np.degrees(yaw), np.degrees(pitch), np.degrees(roll))

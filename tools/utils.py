@@ -37,22 +37,10 @@ def get_image(image_path, input_height, input_width,
   return transform(image, input_height, input_width,
                    resize_height, resize_width, crop)
 
-def save_images(images, size, image_path):
-  return imsave(inverse_transform(images), size, image_path)
-
-
 def load_webp(img_path):
     im = Image.open(img_path)
     return np.asarray(im)
 
-def imread(path, grayscale = False):
-  if (grayscale):
-    return scipy.misc.imread(path, flatten = True).astype(np.float)
-  else:
-    return scipy.misc.imread(path).astype(np.float)
-
-def merge_images(images, size):
-  return inverse_transform(images)
 
 def merge(images, size):
   h, w = images.shape[1], images.shape[2]
@@ -75,9 +63,6 @@ def merge(images, size):
     raise ValueError('in merge(images,size) images parameter '
                      'must have dimensions: HxW or HxWx3 or HxWx4')
 
-def imsave(images, size, path):
-  image = np.squeeze(merge(images, size))
-  return scipy.misc.imsave(path, image)
 
 def center_crop(x, crop_h, crop_w,
                 resize_h=64, resize_w=64):
@@ -103,22 +88,6 @@ def transform(image, input_height, input_width,
 
 def inverse_transform(images):
   return (images+1.)/2.
-
-def jitter_chunk(src, max_jitter_ij, max_jitter_k):
-    dst = src.copy()
-    if np.random.binomial(1, .2):
-        dst[:, :, ::-1, :, :] = dst
-    if np.random.binomial(1, .2):
-        dst[:, :, :, ::-1, :] = dst
-
-    shift_ijk = [np.random.random_integers(-max_jitter_ij, max_jitter_ij),
-                 np.random.random_integers(-max_jitter_ij, max_jitter_ij),
-                 np.random.random_integers(-max_jitter_k, max_jitter_k)]
-    for axis, shift in enumerate(shift_ijk):
-        if shift != 0:
-            # beware wraparound
-            dst = np.roll(dst, shift, axis+2)
-    return dst
 
 def image_manifold_size(num_images):
   manifold_h = int(np.floor(np.sqrt(num_images)))
